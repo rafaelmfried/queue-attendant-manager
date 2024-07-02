@@ -1,26 +1,44 @@
 import { Injectable } from '@nestjs/common';
-import { CreateLineDto } from './dto/create-line.dto';
-import { UpdateLineDto } from './dto/update-line.dto';
+import { InjectQueue } from '@nestjs/bull';
+import { Queue } from 'bull';
+import * as Bull from 'bull';
 
 @Injectable()
 export class LineService {
-  create(createLineDto: CreateLineDto) {
-    return 'This action adds a new line';
+  private queues: { [key: string]: Queue } = {};
+
+  constructor(@InjectQueue('dynamic') private readonly defaultQueue: Queue) {}
+
+  createQueue(name: string) {
+    if (!this.queues[name]) {
+      this.queues[name] = new Bull(name, {
+        redis: {
+          host: process.env.REDIS_HOST,
+          port: parseInt(process.env.REDIS_PORT, 10),
+        },
+      });
+    }
+    return { message: `Queue ${name} created` };
   }
 
-  findAll() {
-    return `This action returns all line`;
+  addToQueue(name: string, ticket: any) {
+    if (this.queues[name]) {
+      this.queues[name].add(ticket);
+      return { message: `Ticket added to queue ${name}` };
+    } else {
+      return { message: `Queue ${name} not found` };
+    }
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} line`;
-  }
-
-  update(id: number, updateLineDto: UpdateLineDto) {
-    return `This action updates a #${id} line`;
-  }
-
-  remove(id: number) {
-    return `This action removes a #${id} line`;
+  processQueue(name: string) {
+    if (this.queues[name]) {
+      this.queues[name].process(async (job) => {
+        console.log(`Processing job ${job.id} from queue ${name}`);
+        // Lógica de processamento do ticket
+      });
+      return { message: `Processing queue ${name}` };
+    } else {
+      return { message: `Queue ${name} not found` };
+    }
   }
 }
